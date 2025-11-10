@@ -106,9 +106,8 @@ dist
 package-lock.json
 script.sh
 
-# Generated contribution scripts and tracking
+# Generated contribution scripts
 *.sh
-contributions.txt
 
 # VS Code
 .vscode
