@@ -57,6 +57,7 @@ const getCommand = (contribution, personalName, personalEmail) => {
   
   // Generate individual commits with unique timestamps (incrementing seconds)
   // Each commit modifies contributions.txt file for real file changes
+  // Includes idempotency checks to prevent duplicate commits if script is run multiple times
   let commands = '';
   for (let i = 0; i < contribution.count; i++) {
     // Start at 12:00:00 and increment by 1 second for each commit
@@ -65,10 +66,15 @@ const getCommand = (contribution, personalName, personalEmail) => {
     const hours = 12 + Math.floor(i / 3600);
     const time = `${String(hours).padStart(2, '0')}:${minutes}:${seconds}`;
     
-    // Append contribution record to file and commit the change
-    commands += `echo "${contribution.date} ${time} - Contribution #${i + 1}" >> contributions.txt\n`;
-    commands += `git add contributions.txt\n`;
-    commands += `GIT_AUTHOR_NAME="${escapedName}" GIT_AUTHOR_EMAIL="${escapedEmail}" GIT_COMMITTER_NAME="${escapedName}" GIT_COMMITTER_EMAIL="${escapedEmail}" GIT_AUTHOR_DATE="${contribution.date}T${time}${easternOffset}" GIT_COMMITTER_DATE="${contribution.date}T${time}${easternOffset}" git commit -m "Contribution for ${contribution.date}" > /dev/null\n`;
+    const entryLine = `${contribution.date} ${time} - Contribution #${i + 1}`;
+    
+    // Add idempotency check: only append if this exact line doesn't already exist
+    // This prevents duplicate commits if the script is accidentally run multiple times
+    commands += `if ! grep -Fxq "${entryLine}" contributions.txt 2>/dev/null; then\n`;
+    commands += `  echo "${entryLine}" >> contributions.txt\n`;
+    commands += `  git add contributions.txt\n`;
+    commands += `  GIT_AUTHOR_NAME="${escapedName}" GIT_AUTHOR_EMAIL="${escapedEmail}" GIT_COMMITTER_NAME="${escapedName}" GIT_COMMITTER_EMAIL="${escapedEmail}" GIT_AUTHOR_DATE="${contribution.date}T${time}${easternOffset}" GIT_COMMITTER_DATE="${contribution.date}T${time}${easternOffset}" git commit -m "Contribution for ${contribution.date}" > /dev/null\n`;
+    commands += `fi\n`;
   }
   
   return commands;
@@ -373,21 +379,111 @@ export default async (input) => {
       console.log(`   Dates affected: ${newContributions.length} days`);
     }
     
+    // Display batch information if enabled
+    if (input.enableBatching) {
+      const batchSize = parseInt(input.batchSize) || 500;
+      const totalBatches = Math.ceil(newTotalCount / batchSize);
+      const estimatedTime = totalBatches * parseInt(input.batchDelayMinutes || 5);
+      console.log(`\n📦 Batch Import Configuration:`);
+      console.log(`   Batch size: ${batchSize} contributions per batch`);
+      console.log(`   Total batches: ${totalBatches}`);
+      console.log(`   Delay between batches: ${input.batchDelayMinutes} minutes`);
+      console.log(`   Estimated time: ~${estimatedTime} minutes`);
+    }
+    
     // Initialize contributions.txt file only on fresh import
+    // With idempotency check to prevent re-initialization if script is run multiple times
     const initCommands = isIncremental 
       ? '' // Skip initialization if file already exists
-      : `# Initialize contributions tracking file
-echo "GitHub Contributions History" > contributions.txt
-git add contributions.txt
-git commit -m "Initialize contributions tracking"
+      : `# Initialize contributions tracking file (with idempotency check)
+if [ ! -f contributions.txt ] || [ ! -s contributions.txt ]; then
+  echo "GitHub Contributions History" > contributions.txt
+  git add contributions.txt
+  git commit -m "Initialize contributions tracking"
+fi
 
 `;
     
-    // Use filtered newContributions instead of sortedContributions
-    const script = initCommands + newContributions
-      .map((contribution) => getCommand(contribution, input.personalName, input.personalEmail))
-      .join("\n")
-      .concat("\ngit pull origin main\n", "git push -f origin main");
+    // Generate script with or without batching
+    let script;
+    if (input.enableBatching) {
+      const batchSize = parseInt(input.batchSize) || 500;
+      const delaySeconds = (parseInt(input.batchDelayMinutes) || 5) * 60;
+      
+      // Split contributions into batches based on total contribution count, not days
+      let commandsArray = [];
+      let currentBatchContributions = 0;
+      let currentBatch = [];
+      let batchNum = 1;
+      const totalBatches = Math.ceil(newTotalCount / batchSize);
+      
+      for (let i = 0; i < newContributions.length; i++) {
+        const contribution = newContributions[i];
+        
+        // If adding this day would exceed batch size, finalize current batch
+        if (currentBatchContributions + contribution.count > batchSize && currentBatch.length > 0) {
+          // Add batch header
+          const batchContribCount = currentBatch.reduce((sum, c) => sum + c.count, 0);
+          commandsArray.push(`\necho "========================================"`);
+          commandsArray.push(`echo "Batch ${batchNum} of ${totalBatches}"`);
+          commandsArray.push(`echo "Processing ${batchContribCount} contributions across ${currentBatch.length} days..."`);
+          commandsArray.push(`echo "========================================\n"`);
+          
+          // Add commands for this batch
+          currentBatch.forEach(contrib => {
+            commandsArray.push(getCommand(contrib, input.personalName, input.personalEmail));
+          });
+          
+          // Push this batch to GitHub
+          commandsArray.push(`\necho "Pushing batch ${batchNum} to GitHub..."`);
+          commandsArray.push(`git pull origin main`);
+          commandsArray.push(`git push -f origin main`);
+          commandsArray.push(`echo "Batch ${batchNum} pushed successfully!"`);
+          
+          // Add delay between batches (not after last batch)
+          if (i < newContributions.length) {
+            commandsArray.push(`\necho "Waiting ${input.batchDelayMinutes} minutes before next batch..."`);
+            commandsArray.push(`sleep ${delaySeconds}\n`);
+          }
+          
+          // Reset for next batch
+          batchNum++;
+          currentBatch = [];
+          currentBatchContributions = 0;
+        }
+        
+        // Add contribution to current batch
+        currentBatch.push(contribution);
+        currentBatchContributions += contribution.count;
+      }
+      
+      // Finalize last batch
+      if (currentBatch.length > 0) {
+        const batchContribCount = currentBatch.reduce((sum, c) => sum + c.count, 0);
+        commandsArray.push(`\necho "========================================"`);
+        commandsArray.push(`echo "Batch ${batchNum} of ${totalBatches}"`);
+        commandsArray.push(`echo "Processing ${batchContribCount} contributions across ${currentBatch.length} days..."`);
+        commandsArray.push(`echo "========================================\n"`);
+        
+        currentBatch.forEach(contrib => {
+          commandsArray.push(getCommand(contrib, input.personalName, input.personalEmail));
+        });
+        
+        // Push final batch to GitHub
+        commandsArray.push(`\necho "Pushing final batch ${batchNum} to GitHub..."`);
+        commandsArray.push(`git pull origin main`);
+        commandsArray.push(`git push -f origin main`);
+        commandsArray.push(`echo "All batches complete! Successfully pushed ${newTotalCount} contributions."`);
+      }
+      
+      script = initCommands + commandsArray.join("\n");
+    } else {
+      // Original non-batched approach
+      script = initCommands + newContributions
+        .map((contribution) => getCommand(contribution, input.personalName, input.personalEmail))
+        .join("\n")
+        .concat("\ngit pull origin main\n", "git push -f origin main");
+    }
 
     console.log(`Script generated (${script.length} characters)`);
 

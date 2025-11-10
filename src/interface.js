@@ -61,6 +61,34 @@ const questions = [
     },
   },
   {
+    type: "confirm",
+    name: "enableBatching",
+    message: "Enable batched imports? (Import in chunks with delays)",
+    default: true,
+  },
+  {
+    type: "input",
+    name: "batchSize",
+    message: "How many contributions per batch?",
+    default: 500,
+    when: (answers) => answers.enableBatching,
+    validate: (value) => {
+      const num = parseInt(value);
+      return num > 0 && num <= 5000 ? true : "Please enter a number between 1 and 5000";
+    },
+  },
+  {
+    type: "input",
+    name: "batchDelayMinutes",
+    message: "Delay between batches (in minutes)?",
+    default: 5,
+    when: (answers) => answers.enableBatching,
+    validate: (value) => {
+      const num = parseInt(value);
+      return num >= 0 && num <= 60 ? true : "Please enter a number between 0 and 60";
+    },
+  },
+  {
     type: "list",
     message: "How would you like this to happen?",
     name: "execute",
