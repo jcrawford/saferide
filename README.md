@@ -22,11 +22,19 @@ This project uses several key technologies to scrape GitHub contribution data an
 The utility scrapes contribution data from a specified GitHub account and generates a bash script named by year (e.g., `2024.sh`, `2023.sh`). This script contains git commands that:
 1. Create backdated commits with timestamps matching the original contributions
 2. Modify the `contributions.txt` file for each commit (to create actual file changes)
-3. Use `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` environment variables to backdate commits to their original dates
+3. Use `GIT_AUTHOR_DddATE` and `GIT_COMMITTER_DATE` environment variables to backdate commits to their original dates
 4. Handle timezone offsets (Eastern Time with DST support) for accurate date mapping
 5. Include idempotency checks to prevent duplicate commits if run multiple times
 
 When executed (e.g., `sh ./2024.sh`), the generated script applies all the backdated commits to your repository and pushes them to GitHub, which then updates your contribution graph to reflect the imported contributions.
+
+<div align="center">
+  <video src="img/demo.mov" width="800" controls>
+    Your browser does not support the video tag.
+  </video>
+</div>
+
+
 
 ## How to Use 🚀
 
