@@ -29,9 +29,9 @@ The utility scrapes contribution data from a specified GitHub account and genera
 When executed (e.g., `sh ./2024.sh`), the generated script applies all the backdated commits to your repository and pushes them to GitHub, which then updates your contribution graph to reflect the imported contributions.
 
 <div align="center">
-  <video src="img/demo.mov" width="800" controls>
-    Your browser does not support the video tag.
-  </video>
+  <a href="img/demo.gif">
+    <img src="img/demo.gif" alt="Demo of script generation process" width="800">
+  </a>
 </div>
 
 
