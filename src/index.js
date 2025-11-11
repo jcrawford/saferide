@@ -13,37 +13,22 @@ const createDebugLoggers = (DEBUG) => {
   return { debugLog, debugError };
 };
 
-// Helper function to calculate Eastern timezone offset (EDT/EST) based on date
-const getEasternOffset = (dateString) => {
-  // Parse the date
-  const date = new Date(dateString + 'T12:00:00Z'); // Parse as UTC to avoid local timezone issues
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth(); // 0-11
-  const day = date.getUTCDate();
-
-  // DST in US Eastern Time:
-  // Starts: 2nd Sunday in March (2:00 AM EST -> 3:00 AM EDT)
-  // Ends: 1st Sunday in November (2:00 AM EDT -> 1:00 AM EST)
-
-  // Find 2nd Sunday in March
-  const march1 = new Date(Date.UTC(year, 2, 1)); // March 1
-  const march1Day = march1.getUTCDay(); // 0=Sunday, 1=Monday, etc.
-  const daysToSecondSunday = march1Day === 0 ? 7 : (7 - march1Day) + 7; // Days to 2nd Sunday
-  const dstStart = new Date(Date.UTC(year, 2, daysToSecondSunday)); // 2nd Sunday in March
-
-  // Find 1st Sunday in November
-  const nov1 = new Date(Date.UTC(year, 10, 1)); // November 1
-  const nov1Day = nov1.getUTCDay();
-  const daysToFirstSunday = nov1Day === 0 ? 0 : (7 - nov1Day); // Days to 1st Sunday
-  const dstEnd = new Date(Date.UTC(year, 10, daysToFirstSunday)); // 1st Sunday in November
-
-  // Check if date is during DST period
-  const currentDate = new Date(Date.UTC(year, month, day));
-  if (currentDate >= dstStart && currentDate < dstEnd) {
-    return '-0400'; // EDT (Eastern Daylight Time)
-  } else {
-    return '-0500'; // EST (Eastern Standard Time)
-  }
+// Helper function to calculate timezone offset for any timezone with automatic DST handling
+const getTimezoneOffset = (dateString) => {
+  // Create a date object for the specific date at noon
+  // This will use the system's local timezone
+  const date = new Date(dateString + 'T12:00:00');
+  
+  // Get the offset for this specific date in the user's timezone
+  // This automatically accounts for DST on that date
+  // getTimezoneOffset() returns minutes, negative for east of UTC
+  const offsetMinutes = -date.getTimezoneOffset();
+  
+  // Format as +/-HHMM for Git
+  const hours = Math.floor(Math.abs(offsetMinutes) / 60);
+  const minutes = Math.abs(offsetMinutes) % 60;
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  return `${sign}${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}`;
 };
 
 // Gathers needed git commands for bash to execute per provided contribution data.
@@ -52,8 +37,8 @@ const getCommand = (contribution, personalName, personalEmail) => {
   const escapedName = personalName.replace(/"/g, '\\"');
   const escapedEmail = personalEmail.replace(/"/g, '\\"');
   
-  // Get Eastern timezone offset (handles DST)
-  const easternOffset = getEasternOffset(contribution.date);
+  // Get timezone offset for the user's system timezone (handles DST automatically)
+  const timezoneOffset = getTimezoneOffset(contribution.date);
   
   // Generate individual commits with unique timestamps (incrementing seconds)
   // Each commit modifies contributions.txt file for real file changes
@@ -73,7 +58,7 @@ const getCommand = (contribution, personalName, personalEmail) => {
     commands += `if ! grep -Fxq "${entryLine}" contributions.txt 2>/dev/null; then\n`;
     commands += `  echo "${entryLine}" >> contributions.txt\n`;
     commands += `  git add contributions.txt\n`;
-    commands += `  GIT_AUTHOR_NAME="${escapedName}" GIT_AUTHOR_EMAIL="${escapedEmail}" GIT_COMMITTER_NAME="${escapedName}" GIT_COMMITTER_EMAIL="${escapedEmail}" GIT_AUTHOR_DATE="${contribution.date}T${time}${easternOffset}" GIT_COMMITTER_DATE="${contribution.date}T${time}${easternOffset}" git commit -m "Contribution for ${contribution.date}" > /dev/null\n`;
+    commands += `  GIT_AUTHOR_NAME="${escapedName}" GIT_AUTHOR_EMAIL="${escapedEmail}" GIT_COMMITTER_NAME="${escapedName}" GIT_COMMITTER_EMAIL="${escapedEmail}" GIT_AUTHOR_DATE="${contribution.date}T${time}${timezoneOffset}" GIT_COMMITTER_DATE="${contribution.date}T${time}${timezoneOffset}" git commit -m "Contribution for ${contribution.date}" > /dev/null\n`;
     commands += `fi\n`;
   }
   
@@ -112,6 +97,10 @@ export default async (input) => {
   // Check for debug flag from command line arguments or input parameter
   const DEBUG = process.argv.includes('--debug') || process.env.DEBUG === 'true' || input.debug === true;
   const { debugLog, debugError } = createDebugLoggers(DEBUG);
+
+  // Detect user's system timezone (used for debug logging only)
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  debugLog(`Detected timezone: ${userTimezone}, offset: ${getTimezoneOffset(new Date().toISOString().split('T')[0])}`);
 
   // Save original environment variables and error handlers
   const originalNodeOptions = process.env.NODE_OPTIONS;
