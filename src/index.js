@@ -383,12 +383,9 @@ export default async (input) => {
     if (input.enableBatching) {
       const batchSize = parseInt(input.batchSize) || 500;
       const totalBatches = Math.ceil(newTotalCount / batchSize);
-      const estimatedTime = totalBatches * parseInt(input.batchDelayMinutes || 5);
       console.log(`\n📦 Batch Import Configuration:`);
       console.log(`   Batch size: ${batchSize} contributions per batch`);
       console.log(`   Total batches: ${totalBatches}`);
-      console.log(`   Delay between batches: ${input.batchDelayMinutes} minutes`);
-      console.log(`   Estimated time: ~${estimatedTime} minutes`);
     }
     
     // Initialize contributions.txt file only on fresh import
@@ -408,7 +405,6 @@ fi
     let script;
     if (input.enableBatching) {
       const batchSize = parseInt(input.batchSize) || 500;
-      const delaySeconds = (parseInt(input.batchDelayMinutes) || 5) * 60;
       
       // Split contributions into batches based on total contribution count, not days
       let commandsArray = [];
@@ -438,13 +434,7 @@ fi
           commandsArray.push(`\necho "Pushing batch ${batchNum} to GitHub..."`);
           commandsArray.push(`git pull origin main`);
           commandsArray.push(`git push -f origin main`);
-          commandsArray.push(`echo "Batch ${batchNum} pushed successfully!"`);
-          
-          // Add delay between batches (not after last batch)
-          if (i < newContributions.length) {
-            commandsArray.push(`\necho "Waiting ${input.batchDelayMinutes} minutes before next batch..."`);
-            commandsArray.push(`sleep ${delaySeconds}\n`);
-          }
+          commandsArray.push(`echo "Batch ${batchNum} pushed successfully!\n"`);
           
           // Reset for next batch
           batchNum++;

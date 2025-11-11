@@ -59,7 +59,6 @@ You can see the syncd contributions [here](https://github.com/jcrawford?tab=over
 | `year`     | Year that you would like to sync with provided `username`. Currently doesn't support multiple years.                                                        | Current year                                         |
 | `batched`  | Whether or not to batch imports (you should)                                                                                                                | Y                                                    |
 | `size`     | How many contributions per batch?                                                                                                                           | 500                                                  |
-| `delay`    | The delay between committing each batch in minutes                                                                                                          | 5                                                    |
 | `execute`  | Let's the code know whether to simply generate `[year].sh` that, when executed, will force push commits to `main`. Or to both generate and execute at once. | `false`, in other words generate _without_ execution |
 | `confirm`  | A quick double check that you're ready to proceed.                                                                                                          | Y                                                    |
 
