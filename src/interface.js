@@ -1,25 +1,8 @@
 import inquirer from "inquirer";
 import script from "./index.js";
 import axios from "axios";
-import { execSync } from "child_process";
 
 console.log("\nHello there!\n");
-
-// Get git config defaults
-let defaultName = "Your Name";
-let defaultEmail = "your.email@example.com";
-
-try {
-  defaultName = execSync("git config user.name", { encoding: "utf-8" }).trim();
-} catch (e) {
-  // Ignore if git config not set
-}
-
-try {
-  defaultEmail = execSync("git config user.email", { encoding: "utf-8" }).trim();
-} catch (e) {
-  // Ignore if git config not set
-}
 
 const questions = [
   {
@@ -37,13 +20,11 @@ const questions = [
     type: "input",
     name: "personalName",
     message: "Enter the name for commit author (will appear in git history):",
-    default: defaultName,
   },
   {
     type: "input",
     name: "personalEmail",
     message: "Enter the email for commit author (must be linked to your GitHub account):",
-    default: defaultEmail,
     validate: (value) => {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(value)) {
